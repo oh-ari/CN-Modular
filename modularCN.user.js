@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.1
+// @version      1.2
 // @description  Imagine if you could drag everything around.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
@@ -18,6 +18,14 @@
 
   const nationId = new URL(window.location.href).searchParams.get('Nation_ID') || 'global';
   const storageKey = `cnModular.rowsInline.v2.${nationId}`;
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const getTbody = (table) => (table.tBodies && table.tBodies[0]) ? table.tBodies[0] : table;
+  const getRowspan = (tr) => {
+    const firstTd = tr ? tr.querySelector('td') : null;
+    const rs = firstTd ? parseInt(firstTd.getAttribute('rowspan') || '1', 10) : 1;
+    return Number.isFinite(rs) && rs > 0 ? rs : 1;
+  };
 
   function injectStyles() {
     const style = document.createElement('style');
@@ -32,14 +40,13 @@
   }
 
   function findMainSectionTable() {
-    const infoAnchor = document.querySelector('a[name="info"]');
+    const infoAnchor = $('a[name="info"]');
     if (!infoAnchor) return null;
     let table = infoAnchor.closest('table');
     while (table) {
       const containsAll = SECTION_ANCHOR_NAMES.every((name) => table.querySelector(`a[name="${name}"]`));
       if (containsAll) return table;
-      const parent = table.parentElement;
-      table = parent ? parent.closest('table') : null;
+      table = table.parentElement ? table.parentElement.closest('table') : null;
     }
     return null;
   }
@@ -74,10 +81,10 @@
   }
 
   function addInlineButtons(mainTable, applyOriginalOrder, saveCurrentOrder) {
-    const tbody = (mainTable.tBodies && mainTable.tBodies[0]) ? mainTable.tBodies[0] : mainTable;
+    const tbody = getTbody(mainTable);
     const rows = Array.from(tbody.rows);
 
-    Array.from(document.querySelectorAll('.cn-toolbar-inline')).forEach((el) => {
+    $$('.cn-toolbar-inline').forEach((el) => {
       const tr = el.closest('tr');
       if (tr && tr.parentElement) tr.parentElement.removeChild(tr);
     });
@@ -87,15 +94,10 @@
 
     const infoLink = quickLinksRow.querySelector('a[href="#info"]');
     const container = infoLink ? infoLink.parentElement : (quickLinksRow.cells[0] || quickLinksRow.querySelector('td'));
-    if (!container) return;
+    if (!container || container.querySelector('.cn-inline-link-save')) return;
 
-    if (container.querySelector('.cn-inline-link-save')) return;
-
-    function appendSeparator() {
-      container.appendChild(document.createTextNode(' | '));
-    }
-
-    function appendLink(text, className, onClick) {
+    const appendSeparator = () => container.appendChild(document.createTextNode(' | '));
+    const appendLink = (text, className, onClick) => {
       const a = document.createElement('a');
       a.href = '#';
       a.className = className;
@@ -103,7 +105,7 @@
       a.addEventListener('click', (e) => { e.preventDefault(); onClick(); });
       container.appendChild(a);
       return a;
-    }
+    };
 
     appendSeparator();
     appendLink('Save Layout', 'cn-inline-link-save', () => saveCurrentOrder());
@@ -121,13 +123,10 @@
     const mainTable = findMainSectionTable();
     if (!mainTable) return;
 
-    const tbody = (mainTable.tBodies && mainTable.tBodies[0]) ? mainTable.tBodies[0] : mainTable;
+    const tbody = getTbody(mainTable);
 
-    const rows = Array.from(tbody.children).filter((el) => el && el.tagName === 'TR');
-    const govHeaderRow = rows.find((tr) => {
-      const a = tr.querySelector && tr.querySelector('a[name]');
-      return a && a.name === 'gov';
-    });
+    const rows = Array.from(tbody.rows);
+    const govHeaderRow = rows.find((tr) => tr.querySelector && tr.querySelector('a[name="gov"]'));
     const govHeaderIndex = govHeaderRow ? rows.indexOf(govHeaderRow) : -1;
 
     const originalDraggableOrder = [];
@@ -139,6 +138,7 @@
       return cellCount >= 2;
     }
 
+    let pendingContinuation = 0;
     rows.forEach((tr, idx) => {
       const key = computeRowKey(tr, idx);
       tr.dataset.rowKey = key;
@@ -147,7 +147,8 @@
       const isHeader = !!(headerAnchor && SECTION_ANCHOR_NAMES.includes(headerAnchor.name));
 
       const isAfterGov = govHeaderIndex >= 0 ? idx > govHeaderIndex : true;
-      const isTopLevel = isTopLevelRow(tr);
+      const isContinuation = pendingContinuation > 0;
+      const isTopLevel = isTopLevelRow(tr) && !isContinuation;
       if (!isHeader && isAfterGov && isTopLevel) {
         tr.classList.add('cn-row-draggable');
         const td = tr.querySelector('td');
@@ -161,6 +162,12 @@
       } else {
         tr.classList.add('cn-row-fixed');
       }
+
+      if (pendingContinuation > 0) {
+        pendingContinuation -= 1;
+      } else {
+        pendingContinuation = Math.max(getRowspan(tr) - 1, 0);
+      }
     });
 
     function isDraggable(tr) {
@@ -168,35 +175,48 @@
     }
 
     function applyOrder(order) {
-      const originalRows = Array.from(tbody.children).filter((el) => el.tagName === 'TR');
-      const currentDraggables = originalRows.filter(isDraggable);
-      const map = new Map(currentDraggables.map((tr) => [tr.dataset.rowKey, tr]));
-
-      const ordered = [];
-      for (const key of order || []) {
-        const tr = map.get(key);
-        if (tr) {
-          ordered.push(tr);
-          map.delete(key);
-        }
-      }
-      for (const tr of map.values()) ordered.push(tr);
-
-      const newRows = [];
-      let di = 0;
-      for (const tr of originalRows) {
-        if (isDraggable(tr)) {
-          newRows.push(ordered[di++] || tr);
+      const allRows = Array.from(tbody.rows);
+      const groups = [];
+      for (let i = 0; i < allRows.length; ) {
+        const row = allRows[i];
+        if (isDraggable(row)) {
+          const span = getRowspan(row);
+          const rowsInGroup = [row];
+          let next = row.nextElementSibling;
+          for (let k = 1; k < span && next; k += 1) {
+            rowsInGroup.push(next);
+            next = next.nextElementSibling;
+          }
+          groups.push({ draggable: true, key: row.dataset.rowKey, rows: rowsInGroup });
+          i += span;
         } else {
-          newRows.push(tr);
+          groups.push({ draggable: false, rows: [row] });
+          i += 1;
         }
       }
-      newRows.forEach((tr) => tbody.appendChild(tr));
+
+      const keyToGroup = new Map(groups.filter((g) => g.draggable).map((g) => [g.key, g]));
+      const desiredGroups = [];
+      for (const key of (order || [])) {
+        const g = keyToGroup.get(key);
+        if (g) desiredGroups.push(g);
+      }
+
+      const rebuilt = [];
+      let di = 0;
+      for (const g of groups) {
+        if (g.draggable) {
+          rebuilt.push(desiredGroups[di++] || g);
+        } else {
+          rebuilt.push(g);
+        }
+      }
+
+      rebuilt.flatMap((g) => g.rows).forEach((tr) => tbody.appendChild(tr));
     }
 
     function currentDraggableOrder() {
-      return Array.from(tbody.children)
-        .filter((el) => el.tagName === 'TR' && isDraggable(el))
+      return Array.from(tbody.querySelectorAll('tr.cn-row-draggable'))
         .map((tr) => tr.dataset.rowKey)
         .filter(Boolean);
     }
@@ -224,11 +244,6 @@
 
     if (typeof Sortable !== 'undefined') {
       let carriedContinuationRows = [];
-      function getGroupSize(startRow) {
-        const firstTd = startRow ? startRow.querySelector('td') : null;
-        const rs = firstTd ? parseInt(firstTd.getAttribute('rowspan') || '1', 10) : 1;
-        return Number.isFinite(rs) && rs > 0 ? rs : 1;
-      }
 
       Sortable.create(tbody, {
         animation: 150,
@@ -242,7 +257,7 @@
             return false;
           }
           if (!govHeaderRow) return true;
-          const children = Array.from(tbody.children).filter((el) => el.tagName === 'TR');
+          const children = Array.from(tbody.rows);
           const govIdx = children.indexOf(govHeaderRow);
           const relatedIdx = children.indexOf(evt.related);
           const candidateIdx = relatedIdx + (evt.willInsertAfter ? 1 : 0);
@@ -251,7 +266,7 @@
         onStart: (evt) => {
           carriedContinuationRows = [];
           const startRow = evt.item;
-          const groupSize = getGroupSize(startRow);
+          const groupSize = getRowspan(startRow);
           if (groupSize <= 1) return;
           let next = startRow.nextElementSibling;
           for (let i = 1; i < groupSize && next; i += 1) {
