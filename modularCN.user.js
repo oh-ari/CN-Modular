@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.0 (technically beta)
+// @version      1.1
 // @description  Imagine if you could drag everything around.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
@@ -77,20 +77,18 @@
     const tbody = (mainTable.tBodies && mainTable.tBodies[0]) ? mainTable.tBodies[0] : mainTable;
     const rows = Array.from(tbody.rows);
 
-    // Remove any legacy toolbar rows from prior versions
     Array.from(document.querySelectorAll('.cn-toolbar-inline')).forEach((el) => {
       const tr = el.closest('tr');
       if (tr && tr.parentElement) tr.parentElement.removeChild(tr);
     });
 
     const quickLinksRow = rows.find((tr) => tr.querySelector && tr.querySelector('a[href="#info"]'));
-    if (!quickLinksRow) return; // fail silently
+    if (!quickLinksRow) return;
 
     const infoLink = quickLinksRow.querySelector('a[href="#info"]');
     const container = infoLink ? infoLink.parentElement : (quickLinksRow.cells[0] || quickLinksRow.querySelector('td'));
     if (!container) return;
 
-    // Guard to avoid duplicates
     if (container.querySelector('.cn-inline-link-save')) return;
 
     function appendSeparator() {
@@ -126,8 +124,6 @@
     const tbody = (mainTable.tBodies && mainTable.tBodies[0]) ? mainTable.tBodies[0] : mainTable;
 
     const rows = Array.from(tbody.children).filter((el) => el && el.tagName === 'TR');
-
-    // Find the Government header row index
     const govHeaderRow = rows.find((tr) => {
       const a = tr.querySelector && tr.querySelector('a[name]');
       return a && a.name === 'gov';
@@ -135,6 +131,13 @@
     const govHeaderIndex = govHeaderRow ? rows.indexOf(govHeaderRow) : -1;
 
     const originalDraggableOrder = [];
+
+    function isTopLevelRow(trEl) {
+      const headerAnchor = trEl.querySelector && trEl.querySelector('a[name]');
+      if (headerAnchor && SECTION_ANCHOR_NAMES.includes(headerAnchor.name)) return false;
+      const cellCount = trEl.cells ? trEl.cells.length : trEl.querySelectorAll('td').length;
+      return cellCount >= 2;
+    }
 
     rows.forEach((tr, idx) => {
       const key = computeRowKey(tr, idx);
@@ -144,7 +147,8 @@
       const isHeader = !!(headerAnchor && SECTION_ANCHOR_NAMES.includes(headerAnchor.name));
 
       const isAfterGov = govHeaderIndex >= 0 ? idx > govHeaderIndex : true;
-      if (!isHeader && isAfterGov) {
+      const isTopLevel = isTopLevelRow(tr);
+      if (!isHeader && isAfterGov && isTopLevel) {
         tr.classList.add('cn-row-draggable');
         const td = tr.querySelector('td');
         if (td && !td.querySelector('.cn-row-handle')) {
@@ -219,6 +223,13 @@
     addInlineButtons(mainTable, applyOriginalOrder, saveCurrentOrder);
 
     if (typeof Sortable !== 'undefined') {
+      let carriedContinuationRows = [];
+      function getGroupSize(startRow) {
+        const firstTd = startRow ? startRow.querySelector('td') : null;
+        const rs = firstTd ? parseInt(firstTd.getAttribute('rowspan') || '1', 10) : 1;
+        return Number.isFinite(rs) && rs > 0 ? rs : 1;
+      }
+
       Sortable.create(tbody, {
         animation: 150,
         handle: '.cn-row-handle',
@@ -227,15 +238,42 @@
         filter: '.cn-row-fixed',
         preventOnFilter: true,
         onMove: (evt) => {
-          // Prevent dropping before the Government header row
+          if (!evt.related || !evt.related.classList || !evt.related.classList.contains('cn-row-draggable')) {
+            return false;
+          }
           if (!govHeaderRow) return true;
           const children = Array.from(tbody.children).filter((el) => el.tagName === 'TR');
           const govIdx = children.indexOf(govHeaderRow);
           const relatedIdx = children.indexOf(evt.related);
           const candidateIdx = relatedIdx + (evt.willInsertAfter ? 1 : 0);
-          return candidateIdx > govIdx; // must be strictly after gov header
+          return candidateIdx > govIdx;
         },
-        onEnd: () => saveCurrentOrder(),
+        onStart: (evt) => {
+          carriedContinuationRows = [];
+          const startRow = evt.item;
+          const groupSize = getGroupSize(startRow);
+          if (groupSize <= 1) return;
+          let next = startRow.nextElementSibling;
+          for (let i = 1; i < groupSize && next; i += 1) {
+            if (next.tagName !== 'TR') break;
+            const toCarry = next;
+            next = next.nextElementSibling;
+            carriedContinuationRows.push(toCarry);
+            toCarry.parentElement && toCarry.parentElement.removeChild(toCarry);
+          }
+        },
+        onEnd: (evt) => {
+          if (carriedContinuationRows && carriedContinuationRows.length) {
+            const insertAfter = evt.item;
+            let reference = insertAfter;
+            carriedContinuationRows.forEach((row) => {
+              reference.parentElement.insertBefore(row, reference.nextElementSibling);
+              reference = row;
+            });
+            carriedContinuationRows = [];
+          }
+          saveCurrentOrder();
+        },
         onSort: () => saveCurrentOrder()
       });
     }
