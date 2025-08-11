@@ -6,6 +6,8 @@
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
 // @grant        none
 // @run-at       document-idle
+// @updateURL    https://github.com/mochi-mochi/modularCN/raw/main/modularCN.user.js
+// @downloadURL  https://github.com/mochi-mochi/modularCN/raw/main/modularCN.user.js
 // @require      https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js
 // ==/UserScript==
 
