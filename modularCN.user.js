@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.3c
+// @version      1.3d
 // @description  Imagine if you could drag everything around and hide it.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
@@ -20,7 +20,7 @@
   const storageKey = `cnModular.rowsInline.v2.${nationId}`;
   const hiddenKey = `cnModular.hiddenRows.v2.${nationId}`;
   const versionKey = `cnModular.version.${nationId}`;
-  const currentVersion = '1.3b';
+  const currentVersion = '1.3d';
   
   if (localStorage.getItem(versionKey) !== currentVersion) {
     localStorage.removeItem(storageKey);
@@ -130,7 +130,7 @@
     return `row-${slug}-${index}`;
   }
 
-  function addInlineButtons(mainTable, applyOriginalOrder, saveCurrentOrder, showHiddenDropdown) {
+  function addInlineButtons(mainTable, applyOriginalOrder, saveCurrentOrder, showHiddenDropdown, hiddenRows, saveHiddenRows, applyOriginalOrderFunc) {
     const tbody = getTbody(mainTable);
     const rows = Array.from(tbody.rows);
 
@@ -210,6 +210,29 @@
       e.preventDefault();
       localStorage.removeItem(storageKey);
       localStorage.removeItem(hiddenKey);
+      
+      const allRows = Array.from(tbody.rows);
+      allRows.forEach(tr => {
+        tr.classList.remove('cn-row-hidden');
+        delete tr.dataset.hiddenBy;
+      });
+      
+      const visibleRows = Array.from(tbody.rows);
+      visibleRows.forEach(tr => {
+        tr.classList.remove('cn-row-hidden');
+        delete tr.dataset.hiddenBy;
+      });
+
+      hiddenRows.splice(0, hiddenRows.length);
+      saveHiddenRows();
+      
+      document.querySelectorAll('.cn-hidden-section').forEach(section => section.remove());
+      
+      const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
+      if (showHiddenBtn) {
+        showHiddenBtn.textContent = 'Show Hidden';
+      }
+      
       applyOriginalOrder();
       saveCurrentOrder();
       hideDropdown();
@@ -560,7 +583,18 @@
         }
       }
 
-      rebuilt.flatMap((g) => g.rows).forEach((tr) => tbody.appendChild(tr));
+      const finalRows = rebuilt.flatMap((g) => g.rows);
+      finalRows.forEach((tr) => {
+        if (!tr.classList.contains('cn-row-hidden')) {
+          tbody.appendChild(tr);
+        }
+      });
+      
+      finalRows.forEach((tr) => {
+        if (tr.classList.contains('cn-row-hidden')) {
+          tbody.appendChild(tr);
+        }
+      });
     }
 
     function currentDraggableOrder() {
@@ -605,7 +639,7 @@
       } else {
         createHiddenDropdown(hiddenRows, unhideRow);
       }
-    });
+    }, hiddenRows, saveHiddenRows, applyOriginalOrder);
 
     function hideHeaderSection(key, headerTr) {
       const headerCell = headerTr.querySelector('td');
