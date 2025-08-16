@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.3b
+// @version      1.3c
 // @description  Imagine if you could drag everything around and hide it.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
@@ -432,8 +432,27 @@
 
     function hideRow(key, tr) {
       const label = tr.dataset.originalText || tr.querySelector('td')?.textContent?.trim() || 'Hidden Row';
-      hiddenRows.push({ key, label, tr });
-      tr.classList.add('cn-row-hidden');
+      const rowspan = getRowspan(tr);
+      
+      const rowsToHide = [tr];
+      if (rowspan > 1) {
+        let next = tr.nextElementSibling;
+        for (let i = 1; i < rowspan && next; i++) {
+          if (next.tagName === 'TR') {
+            rowsToHide.push(next);
+            next = next.nextElementSibling;
+          }
+        }
+      }
+      
+      rowsToHide.forEach(row => {
+        row.classList.add('cn-row-hidden');
+        if (row !== tr) {
+          row.dataset.hiddenBy = key;
+        }
+      });
+      
+      hiddenRows.push({ key, label, tr, rowspan, rowsToHide });
       saveHiddenRows();
       saveCurrentOrder();
       document.querySelectorAll('.cn-hidden-section').forEach(section => section.remove());
@@ -443,7 +462,15 @@
     function unhideRow(key) {
       const hiddenRow = hiddenRows.find(r => r.key === key);
       if (hiddenRow) {
-        hiddenRow.tr.classList.remove('cn-row-hidden');
+        if (hiddenRow.rowsToHide) {
+          hiddenRow.rowsToHide.forEach(row => {
+            row.classList.remove('cn-row-hidden');
+            delete row.dataset.hiddenBy;
+          });
+        } else {
+          hiddenRow.tr.classList.remove('cn-row-hidden');
+        }
+        
         hiddenRows.splice(hiddenRows.indexOf(hiddenRow), 1);
         saveHiddenRows();
         saveCurrentOrder();
@@ -469,8 +496,23 @@
         saved.forEach(item => {
           const tr = tbody.querySelector(`[data-row-key="${item.key}"]`);
           if (tr) {
+            const rowspan = getRowspan(tr);
+            const rowsToHide = [tr];
+            
+            if (rowspan > 1) {
+              let next = tr.nextElementSibling;
+              for (let i = 1; i < rowspan && next; i++) {
+                if (next.tagName === 'TR') {
+                  rowsToHide.push(next);
+                  next.classList.add('cn-row-hidden');
+                  next.dataset.hiddenBy = item.key;
+                  next = next.nextElementSibling;
+                }
+              }
+            }
+            
             tr.classList.add('cn-row-hidden');
-            hiddenRows.push({ key: item.key, label: item.label, tr });
+            hiddenRows.push({ key: item.key, label: item.label, tr, rowspan, rowsToHide });
           }
         });
       } catch (_) {}
