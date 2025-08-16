@@ -19,6 +19,15 @@
   const nationId = new URL(window.location.href).searchParams.get('Nation_ID') || 'global';
   const storageKey = `cnModular.rowsInline.v2.${nationId}`;
   const hiddenKey = `cnModular.hiddenRows.v2.${nationId}`;
+  const versionKey = `cnModular.version.${nationId}`;
+  const currentVersion = '1.3b';
+  
+  if (localStorage.getItem(versionKey) !== currentVersion) {
+    localStorage.removeItem(storageKey);
+    localStorage.removeItem(hiddenKey);
+    localStorage.setItem(versionKey, currentVersion);
+  }
+  
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const getTbody = (table) => (table.tBodies && table.tBodies[0]) ? table.tBodies[0] : table;
@@ -33,6 +42,7 @@
     style.id = 'cn-modular-rows-styles';
     style.textContent = `
       .cn-row-fixed { background: #000080; color: #fff; }
+      .cn-row-locked { background: #2d5016; color: #fff; cursor: not-allowed; }
       .cn-row-draggable:hover { outline:1px dashed #b5c7ff; }
       .cn-row-handle { cursor:move; color:#5c6ac4; font-weight:bold; margin-right:6px; user-select:none; display:inline-block; min-width:10px; }
       .cn-row-placeholder { outline:2px dashed #000080; background:#f5f8ff; height: 32px; }
@@ -211,6 +221,18 @@
       setTimeout(hideDropdown, 100);
     });
     
+    const updateShowHiddenButtonText = () => {
+      const existingSections = document.querySelectorAll('.cn-hidden-section');
+      showHiddenBtn.textContent = existingSections.length > 0 ? 'Hide Hidden' : 'Show Hidden';
+    };
+    
+    document.addEventListener('click', (e) => {
+      if (!mochiButton.contains(e.target)) {
+        dropdown.style.display = 'none';
+      }
+      updateShowHiddenButtonText();
+    });
+    
     mochiButton.style.position = 'relative';
     mochiButton.appendChild(dropdown);
     
@@ -310,6 +332,11 @@
       parent.insertBefore(headerRow, mainTable.nextSibling);
       parent.insertBefore(contentRow, headerRow.nextSibling);
     }
+    
+    const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
+    if (showHiddenBtn) {
+      showHiddenBtn.textContent = 'Hide Hidden';
+    }
   }
 
   function main() {
@@ -334,6 +361,13 @@
       return cellCount >= 2;
     }
 
+    function isLockedRow(trEl) {
+      const firstTd = trEl.querySelector('td');
+      if (!firstTd) return false;
+      const text = firstTd.textContent.trim();
+      return text.includes('Ruler:') || text.includes('Nation Name:') || text.includes('Last Tax Collection:');
+    }
+
     let pendingContinuation = 0;
     rows.forEach((tr, idx) => {
       const key = computeRowKey(tr, idx);
@@ -346,44 +380,48 @@
       const isContinuation = pendingContinuation > 0;
       const isTopLevel = isTopLevelRow(tr) && !isContinuation;
       if (!isHeader && isAfterGov && isTopLevel) {
-        tr.classList.add('cn-row-draggable');
-        const td = tr.querySelector('td');
-        if (td && !td.querySelector('.cn-row-handle')) {
-          const originalText = td.textContent.trim().replace(/:+$/, '');
-          tr.dataset.originalText = originalText;
-          
-          const handle = document.createElement('span');
-          handle.className = 'cn-row-handle';
-          handle.textContent = '⋮⋮';
-          td.insertBefore(handle, td.firstChild);
-
-          const hideBtn = document.createElement('span');
-          hideBtn.className = 'cn-row-hide-btn';
-          hideBtn.innerHTML = '👁';
-          hideBtn.title = 'Hide row';
-          hideBtn.onclick = () => hideRow(key, tr);
-          td.appendChild(hideBtn);
-        }
-        originalDraggableOrder.push(key);
-              } else if (isHeader) {
-          const headerText = tr.querySelector('td')?.textContent?.trim() || '';
-          const isSpecialHeader = headerText.includes('Nation Information') || headerText.includes('Private Nation Messages');
-          
-          if (!isSpecialHeader) {
-            tr.classList.add('cn-row-header');
-            const td = tr.querySelector('td');
-            if (td && !td.querySelector('.cn-header-hide-btn')) {
-              const hideBtn = document.createElement('span');
-              hideBtn.className = 'cn-header-hide-btn';
-              hideBtn.innerHTML = '👁';
-              hideBtn.title = 'Hide section';
-              hideBtn.onclick = () => hideHeaderSection(key, tr);
-              td.appendChild(hideBtn);
-            }
-          }
+        if (isLockedRow(tr)) {
+          tr.classList.add('cn-row-fixed', 'cn-row-locked');
         } else {
-          tr.classList.add('cn-row-fixed');
+          tr.classList.add('cn-row-draggable');
+          const td = tr.querySelector('td');
+          if (td && !td.querySelector('.cn-row-handle')) {
+            const originalText = td.textContent.trim().replace(/:+$/, '');
+            tr.dataset.originalText = originalText;
+            
+            const handle = document.createElement('span');
+            handle.className = 'cn-row-handle';
+            handle.textContent = '⋮⋮';
+            td.insertBefore(handle, td.firstChild);
+
+            const hideBtn = document.createElement('span');
+            hideBtn.className = 'cn-row-hide-btn';
+            hideBtn.innerHTML = '👁';
+            hideBtn.title = 'Hide row';
+            hideBtn.onclick = () => hideRow(key, tr);
+            td.appendChild(hideBtn);
+          }
+          originalDraggableOrder.push(key);
         }
+      } else if (isHeader) {
+        const headerText = tr.querySelector('td')?.textContent?.trim() || '';
+        const isSpecialHeader = headerText.includes('Nation Information') || headerText.includes('Private Nation Messages');
+        
+        if (!isSpecialHeader) {
+          tr.classList.add('cn-row-header');
+          const td = tr.querySelector('td');
+          if (td && !td.querySelector('.cn-header-hide-btn')) {
+            const hideBtn = document.createElement('span');
+            hideBtn.className = 'cn-header-hide-btn';
+            hideBtn.innerHTML = '👁';
+            hideBtn.title = 'Hide section';
+            hideBtn.onclick = () => hideHeaderSection(key, tr);
+            td.appendChild(hideBtn);
+          }
+        }
+      } else {
+        tr.classList.add('cn-row-fixed');
+      }
 
       if (pendingContinuation > 0) {
         pendingContinuation -= 1;
@@ -412,6 +450,11 @@
         document.querySelectorAll('.cn-hidden-section').forEach(section => section.remove());
         if (hiddenRows.length > 0) {
           createHiddenDropdown(hiddenRows, unhideRow);
+        } else {
+          const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
+          if (showHiddenBtn) {
+            showHiddenBtn.textContent = 'Show Hidden';
+          }
         }
       }
     }
@@ -513,6 +556,10 @@
       const existingSections = document.querySelectorAll('.cn-hidden-section');
       if (existingSections.length > 0) {
         existingSections.forEach(section => section.remove());
+        const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
+        if (showHiddenBtn) {
+          showHiddenBtn.textContent = 'Show Hidden';
+        }
       } else {
         createHiddenDropdown(hiddenRows, unhideRow);
       }
@@ -548,7 +595,7 @@
         handle: '.cn-row-handle',
         ghostClass: 'cn-row-placeholder',
         draggable: 'tr.cn-row-draggable:not(.cn-row-hidden)',
-        filter: '.cn-row-fixed, .cn-row-hidden',
+        filter: '.cn-row-fixed, .cn-row-hidden, .cn-row-locked',
         preventOnFilter: true,
         onMove: (evt) => {
           if (!evt.related || !evt.related.classList || !evt.related.classList.contains('cn-row-draggable')) {
