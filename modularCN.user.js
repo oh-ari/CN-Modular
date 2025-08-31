@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.3d
+// @version      1.3e
 // @description  Imagine if you could drag everything around and hide it.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
