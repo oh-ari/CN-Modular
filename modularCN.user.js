@@ -43,6 +43,7 @@
     style.textContent = `
       .cn-row-fixed { background: #000080; color: #fff; }
       .cn-row-locked { background: #2d5016; color: #fff; cursor: not-allowed; }
+      .cn-row-locked td { user-select: text; -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; }
       .cn-row-draggable:hover { outline:1px dashed #b5c7ff; }
       .cn-row-handle { cursor:move; color:#5c6ac4; font-weight:bold; margin-right:6px; user-select:none; display:inline-block; min-width:10px; }
       .cn-row-placeholder { outline:2px dashed #000080; background:#f5f8ff; height: 32px; }
@@ -404,7 +405,7 @@
       const isTopLevel = isTopLevelRow(tr) && !isContinuation;
       if (!isHeader && isAfterGov && isTopLevel) {
         if (isLockedRow(tr)) {
-          tr.classList.add('cn-row-fixed', 'cn-row-locked');
+          tr.classList.add('cn-row-locked');
         } else {
           tr.classList.add('cn-row-draggable');
           const td = tr.querySelector('td');
@@ -672,7 +673,7 @@
         ghostClass: 'cn-row-placeholder',
         draggable: 'tr.cn-row-draggable:not(.cn-row-hidden)',
         filter: '.cn-row-fixed, .cn-row-hidden, .cn-row-locked',
-        preventOnFilter: true,
+        preventOnFilter: false,
         onMove: (evt) => {
           if (!evt.related || !evt.related.classList || !evt.related.classList.contains('cn-row-draggable')) {
             return false;
