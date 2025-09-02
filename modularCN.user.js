@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.3e
+// @version      1.3f
 // @description  Imagine if you could drag everything around and hide it.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
@@ -16,11 +16,21 @@
 
   const SECTION_ANCHOR_NAMES = ['info', 'messages', 'gov', 'mil', 'pop', 'fin'];
 
-  const nationId = new URL(window.location.href).searchParams.get('Nation_ID') || 'global';
-  const storageKey = `cnModular.rowsInline.v2.${nationId}`;
-  const hiddenKey = `cnModular.hiddenRows.v2.${nationId}`;
-  const versionKey = `cnModular.version.${nationId}`;
+  const userNationId = (() => {
+    const viewMyNationLink = document.querySelector('a[href*="nation_drill_display.asp?Nation_ID="]');
+    return viewMyNationLink ? new URL(viewMyNationLink.href).searchParams.get('Nation_ID') : 'global';
+  })();
+  
+  const storageKey = `cnModular.rowsInline.v2.${userNationId}`;
+  const hiddenKey = `cnModular.hiddenRows.v2.${userNationId}`;
+  const versionKey = `cnModular.version.${userNationId}`;
   const currentVersion = '1.3d';
+  
+  Object.keys(localStorage).forEach(key => {
+    if (key.startsWith('cnModular.') && !key.includes(userNationId)) {
+      localStorage.removeItem(key);
+    }
+  });
   
   if (localStorage.getItem(versionKey) !== currentVersion) {
     localStorage.removeItem(storageKey);
