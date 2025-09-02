@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.3f
+// @version      1.3g
 // @description  Imagine if you could drag everything around and hide it.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
 // @grant        none
 // @run-at       document-idle
-// @updateURL    https://github.com/oh-ari/modularCN/raw/main/modularCN.user.js
-// @downloadURL  https://github.com/oh-ari/modularCN/raw/main/modularCN.user.js
+// @updateURL    https://raw.githubusercontent.com/oh-ari/modularCN/raw/main/modularCN.user.js
+// @downloadURL  https://raw.githubusercontent.com/oh-ari/modularCN/raw/main/modularCN.user.js
 // @require      https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js
 // ==/UserScript==
 
