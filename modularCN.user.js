@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.3g
+// @version      1.3h
 // @description  Imagine if you could drag everything around and hide it.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
@@ -23,20 +23,6 @@
   
   const storageKey = `cnModular.rowsInline.v2.${userNationId}`;
   const hiddenKey = `cnModular.hiddenRows.v2.${userNationId}`;
-  const versionKey = `cnModular.version.${userNationId}`;
-  const currentVersion = '1.3d';
-  
-  Object.keys(localStorage).forEach(key => {
-    if (key.startsWith('cnModular.') && !key.includes(userNationId)) {
-      localStorage.removeItem(key);
-    }
-  });
-  
-  if (localStorage.getItem(versionKey) !== currentVersion) {
-    localStorage.removeItem(storageKey);
-    localStorage.removeItem(hiddenKey);
-    localStorage.setItem(versionKey, currentVersion);
-  }
   
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -256,8 +242,7 @@
     });
     
     const updateShowHiddenButtonText = () => {
-      const existingSections = document.querySelectorAll('.cn-hidden-section');
-      showHiddenBtn.textContent = existingSections.length > 0 ? 'Hide Hidden' : 'Show Hidden';
+      showHiddenBtn.textContent = hiddenRows.length > 0 ? 'Hide Hidden' : 'Show Hidden';
     };
     
     document.addEventListener('click', (e) => {
@@ -490,7 +475,6 @@
       saveHiddenRows();
       saveCurrentOrder();
       document.querySelectorAll('.cn-hidden-section').forEach(section => section.remove());
-      createHiddenDropdown(hiddenRows, unhideRow);
     }
 
     function unhideRow(key) {
@@ -509,9 +493,7 @@
         saveHiddenRows();
         saveCurrentOrder();
         document.querySelectorAll('.cn-hidden-section').forEach(section => section.remove());
-        if (hiddenRows.length > 0) {
-          createHiddenDropdown(hiddenRows, unhideRow);
-        } else {
+        if (hiddenRows.length === 0) {
           const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
           if (showHiddenBtn) {
             showHiddenBtn.textContent = 'Show Hidden';
@@ -647,8 +629,6 @@
         if (showHiddenBtn) {
           showHiddenBtn.textContent = 'Show Hidden';
         }
-      } else {
-        createHiddenDropdown(hiddenRows, unhideRow);
       }
     }, hiddenRows, saveHiddenRows, applyOriginalOrder);
 
@@ -671,7 +651,6 @@
       saveHiddenRows();
       saveCurrentOrder();
       document.querySelectorAll('.cn-hidden-section').forEach(section => section.remove());
-      createHiddenDropdown(hiddenRows, unhideRow);
     }
 
     if (typeof Sortable !== 'undefined') {
