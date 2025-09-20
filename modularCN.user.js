@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Modular CN
-// @version      1.3h
+// @version      1.4
 // @description  Imagine if you could drag everything around and hide it.
 // @author       Ari / Mochi
 // @match        https://www.cybernations.net/nation_drill_display.asp?*
@@ -16,10 +16,30 @@
 
   const SECTION_ANCHOR_NAMES = ['info', 'messages', 'gov', 'mil', 'pop', 'fin'];
 
-  const userNationId = (() => {
+  function getUserNationId() {
     const viewMyNationLink = document.querySelector('a[href*="nation_drill_display.asp?Nation_ID="]');
-    return viewMyNationLink ? new URL(viewMyNationLink.href).searchParams.get('Nation_ID') : 'global';
-  })();
+    if (viewMyNationLink) {
+      const nationId = new URL(viewMyNationLink.href).searchParams.get('Nation_ID');
+      if (nationId) {
+        localStorage.setItem('cn:lastNationId', nationId);
+        return nationId;
+      }
+    }
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlNationId = urlParams.get('Nation_ID');
+    if (urlNationId) {
+      localStorage.setItem('cn:lastNationId', urlNationId);
+      return urlNationId;
+    }
+    
+    const storedNationId = localStorage.getItem('cn:lastNationId');
+    if (storedNationId) return storedNationId;
+    
+    return 'global';
+  }
+  
+  const userNationId = getUserNationId();
   
   const storageKey = `cnModular.rowsInline.v2.${userNationId}`;
   const hiddenKey = `cnModular.hiddenRows.v2.${userNationId}`;
@@ -41,20 +61,59 @@
       .cn-row-locked { background: #2d5016; color: #fff; cursor: not-allowed; }
       .cn-row-locked td { user-select: text; -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; }
       .cn-row-draggable:hover { outline:1px dashed #b5c7ff; }
-      .cn-row-handle { cursor:move; color:#5c6ac4; font-weight:bold; margin-right:6px; user-select:none; display:inline-block; min-width:10px; }
+      .cn-row-handle { cursor:move; color:#5c6ac4; font-weight:bold; margin-right:2px; user-select:none; display:inline-block; width:12px; height:16px; text-align:center; line-height:16px; vertical-align:top; -webkit-box-sizing:border-box; }
+      @media screen and (-webkit-min-device-pixel-ratio:0) {
+        #table20 { display:inline-block; width:120px; }
+        #table20 tr tbody tr:first-child { display:none; }
+        #table20 tr tbody tr td { padding:0; }
+        .cn-row-handle { vertical-align: top; margin-left: 0; margin-right: 2px; padding: 0; width: 12px; }
+        .row-nation-created-19 .cn-row-handle { margin-right:9px; }
+        .row-defending-soldiers-38 .cn-row-handle { margin-right:9px; }
+        .row-deployed-soldiers-39 .cn-row-handle { margin-right:9px; }
+        .row-defending-tanks-41 .cn-row-handle { margin-right:9px; }
+        .row-deployed-tanks-42 .cn-row-handle { margin-right:9px; }
+      }
       .cn-row-placeholder { outline:2px dashed #000080; background:#f5f8ff; height: 32px; }
       .cn-row-hidden { display: none; }
       .cn-row-hide-btn { cursor:pointer; color:#5c6ac4; margin-left:6px; user-select:none; float:right; }
       .cn-header-hide-btn { cursor:pointer; color:#FFFFFF; margin-left:6px; user-select:none; float:right; }
-      .cn-hidden-row { border-bottom: 1px solid #000080; }
+      .cn-hidden-row { 
+        border-bottom: 1px solid #000080; 
+      }
       .cn-hidden-row td { 
-        padding: 8px; 
+        padding: 4px 8px; 
         border-bottom: 1px solid #000080; 
         border-right: 1px solid #000080; 
+        background: #FFFFFF;
       }
       .cn-hidden-row td:last-child { border-right: none; }
       .cn-hidden-row:hover { background-color: #f8f9fa; }
-      .cn-hidden-row:last-child td { border-bottom: none; }
+      .cn-hidden-content {
+        position: relative;
+        padding-right: 25px;
+      }
+      .cn-hidden-content table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .cn-hidden-content td {
+        padding: 4px 8px;
+        border: none;
+        background: transparent;
+        font-size: 12px;
+      }
+      .cn-hidden-unhide-btn {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        cursor: pointer;
+        color: #5c6ac4;
+        font-size: 12px;
+        padding: 2px;
+      }
+      .cn-hidden-unhide-btn:hover {
+        color: #000080;
+      }
       .cn-modular-panel {
         background-color: #f0f0f0;
         padding: 8px;
@@ -242,7 +301,8 @@
     });
     
     const updateShowHiddenButtonText = () => {
-      showHiddenBtn.textContent = hiddenRows.length > 0 ? 'Hide Hidden' : 'Show Hidden';
+      const hasVisibleSections = document.querySelectorAll('.cn-hidden-section').length > 0;
+      showHiddenBtn.textContent = hasVisibleSections ? 'Hide Hidden' : 'Show Hidden';
     };
     
     document.addEventListener('click', (e) => {
@@ -263,6 +323,23 @@
     
     function toggleModularDropdown() {
       dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    }
+  }
+
+  function migrateFromGlobalKeys() {
+    if (userNationId === 'global') return;
+    
+    const globalStorageKey = 'cnModular.rowsInline.v2.global';
+    const globalHiddenKey = 'cnModular.hiddenRows.v2.global';
+    
+    const globalRows = localStorage.getItem(globalStorageKey);
+    const globalHidden = localStorage.getItem(globalHiddenKey);
+    
+    if (globalRows && !localStorage.getItem(storageKey)) {
+      localStorage.setItem(storageKey, globalRows);
+    }
+    if (globalHidden && !localStorage.getItem(hiddenKey)) {
+      localStorage.setItem(hiddenKey, globalHidden);
     }
   }
 
@@ -308,32 +385,76 @@
       rowTr.className = 'cn-hidden-row';
       
       const labelTd = document.createElement('td');
-      labelTd.bgcolor = '#FFFFFF';
       labelTd.width = '40%';
       labelTd.valign = 'top';
-      labelTd.innerHTML = `${row.label || 'Hidden Row'}:<span class="cn-row-hide-btn" title="Show row">👁</span>`;
+      labelTd.innerHTML = `${row.label || 'Hidden Row'}:`;
       
       const contentTd = document.createElement('td');
-      contentTd.bgcolor = '#FFFFFF';
       contentTd.width = '60%';
+      contentTd.className = 'cn-hidden-content';
       
-      const unhideBtn = document.createElement('a');
-      Object.assign(unhideBtn, {
-        href: '#',
-        textContent: 'Show Row',
-        onclick: (e) => {
-          e.preventDefault();
-          unhideRow(row.key);
-        }
-      });
-      Object.assign(unhideBtn.style, {
-        color: '#000080',
-        textDecoration: 'none',
-        fontWeight: 'bold'
-      });
+      if (row.rowsToHide && row.rowsToHide.length > 0) {
+        row.rowsToHide.forEach((originalRow) => {
+          const cells = originalRow.querySelectorAll('td');
+          cells.forEach((cell, index) => {
+            if (index > 0 || cell.getAttribute('colspan')) {
+              const contentDiv = document.createElement('div');
+              contentDiv.style.cssText = 'padding: 4px 8px; display: inline-block;';
+              
+              const images = cell.querySelectorAll('img');
+              images.forEach(img => {
+                const clonedImg = img.cloneNode(true);
+                clonedImg.style.cssText = 'margin: 0 2px; vertical-align: middle;';
+                contentDiv.appendChild(clonedImg);
+              });
+              
+              const textContent = cell.textContent.trim();
+              if (textContent) {
+                const textSpan = document.createElement('span');
+                textSpan.textContent = textContent;
+                contentDiv.appendChild(textSpan);
+              }
+              
+              contentTd.appendChild(contentDiv);
+            }
+          });
+        });
+      } else if (row.tr) {
+        const cells = row.tr.querySelectorAll('td');
+        cells.forEach((cell, index) => {
+          if (index > 0 || cell.getAttribute('colspan')) {
+            const contentDiv = document.createElement('div');
+            contentDiv.style.cssText = 'padding: 4px 8px; display: inline-block;';
+            
+            const images = cell.querySelectorAll('img');
+            images.forEach(img => {
+              const clonedImg = img.cloneNode(true);
+              clonedImg.style.cssText = 'margin: 0 2px; vertical-align: middle;';
+              contentDiv.appendChild(clonedImg);
+            });
+            
+            const textContent = cell.textContent.trim();
+            if (textContent) {
+              const textSpan = document.createElement('span');
+              textSpan.textContent = textContent;
+              contentDiv.appendChild(textSpan);
+            }
+            
+            contentTd.appendChild(contentDiv);
+          }
+        });
+      }
+      
+      const unhideBtn = document.createElement('span');
+      unhideBtn.className = 'cn-hidden-unhide-btn';
+      unhideBtn.innerHTML = '👁';
+      unhideBtn.title = 'Show row';
+      unhideBtn.onclick = (e) => {
+        e.preventDefault();
+        unhideRow(row.key);
+      };
       
       contentTd.appendChild(unhideBtn);
-      
       rowTr.appendChild(labelTd);
       rowTr.appendChild(contentTd);
       hiddenTbody.appendChild(rowTr);
@@ -360,6 +481,7 @@
 
   function main() {
     injectStyles();
+    migrateFromGlobalKeys();
 
     const mainTable = findMainSectionTable();
     if (!mainTable) return;
@@ -410,8 +532,28 @@
             
             const handle = document.createElement('span');
             handle.className = 'cn-row-handle';
-            handle.textContent = '⋮⋮';
+            handle.innerHTML = '⋮⋮';
+            handle.style.cssText = 'cursor:move; color:#5c6ac4; font-weight:bold; margin-right:2px; user-select:none; display:inline-block; width:12px; text-align:center;';
             td.insertBefore(handle, td.firstChild);
+            
+            const isWebkit = navigator.userAgent.includes('WebKit') && !navigator.userAgent.includes('Chrome');
+            if (isWebkit) {
+              const currentWidth = td.offsetWidth;
+              const newWidth = Math.max(currentWidth + 20, 120);
+              td.style.width = newWidth + 'px';
+              
+              const sideMenu = document.querySelector('table[width="155"]');
+              if (sideMenu) {
+                sideMenu.style.marginRight = '20px';
+              }
+              
+              const mainTable = findMainSectionTable();
+              if (mainTable && !mainTable.querySelector('colgroup')) {
+                const colgroup = document.createElement('colgroup');
+                colgroup.innerHTML = '<col style="width: 25%;"><col style="width: 50%;"><col style="width: 25%;">';
+                mainTable.insertBefore(colgroup, mainTable.firstChild);
+              }
+            }
 
             const hideBtn = document.createElement('span');
             hideBtn.className = 'cn-row-hide-btn';
@@ -493,11 +635,10 @@
         saveHiddenRows();
         saveCurrentOrder();
         document.querySelectorAll('.cn-hidden-section').forEach(section => section.remove());
-        if (hiddenRows.length === 0) {
-          const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
-          if (showHiddenBtn) {
-            showHiddenBtn.textContent = 'Show Hidden';
-          }
+        const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
+        if (showHiddenBtn) {
+          const hasVisibleSections = document.querySelectorAll('.cn-hidden-section').length > 0;
+          showHiddenBtn.textContent = hasVisibleSections ? 'Hide Hidden' : 'Show Hidden';
         }
       }
     }
@@ -625,10 +766,13 @@
       const existingSections = document.querySelectorAll('.cn-hidden-section');
       if (existingSections.length > 0) {
         existingSections.forEach(section => section.remove());
-        const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
-        if (showHiddenBtn) {
-          showHiddenBtn.textContent = 'Show Hidden';
-        }
+      } else {
+        createHiddenDropdown(hiddenRows, unhideRow);
+      }
+      const showHiddenBtn = document.querySelector('.cn-dropdown-show-hidden');
+      if (showHiddenBtn) {
+        const hasVisibleSections = document.querySelectorAll('.cn-hidden-section').length > 0;
+        showHiddenBtn.textContent = hasVisibleSections ? 'Hide Hidden' : 'Show Hidden';
       }
     }, hiddenRows, saveHiddenRows, applyOriginalOrder);
 
